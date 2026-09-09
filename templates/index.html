@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heston-Kou Quant Platform — Pemodelan Harga Saham</title>
+    <meta name="description" content="Platform Kuantitatif Pemodelan Harga Saham Model Heston-Kou (Stochastic Volatility & Double Exponential Jump-Diffusion)">
+    
+    <!-- Google Fonts: Space Grotesk, Inter, JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css?v=2.3">
+</head>
+<body class="quant-body">
+
+    <!-- GLOBAL NAVBAR -->
+    <header class="navbar">
+        <div class="nav-container">
+            <!-- Brand -->
+            <div class="nav-brand">
+                <div class="brand-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                        <polyline points="16 7 22 7 22 13"></polyline>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-title">Heston-Kou Quant Platform</span>
+                    <span class="brand-sub">λ(t) • σ(t) • v(t)</span>
+                </div>
+            </div>
+
+            <!-- Tabs Navigation -->
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-target="page-upload" id="tabUpload">
+                    1. BERANDA &amp; UPLOAD
+                </button>
+                <button class="nav-tab" data-target="page-loading" id="tabLoading">
+                    2. SIMULASI &amp; LOADING
+                </button>
+                <button class="nav-tab" data-target="page-dashboard" id="tabDashboard">
+                    3. DASHBOARD HASIL
+                </button>
+            </nav>
+
+            <!-- User / Author Info & Theme Toggle -->
+            <div class="nav-meta">
+                <!-- Segmented Switch: Clear Gelap vs Terang -->
+                <div class="theme-segmented-switch" id="themeSegmentedSwitch" role="group" aria-label="Pilihan Tema">
+                    <button type="button" class="theme-seg-btn active" id="btnThemeDark" data-theme="dark" title="Mode Gelap">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                        <span>Gelap</span>
+                    </button>
+                    <button type="button" class="theme-seg-btn" id="btnThemeLight" data-theme="light" title="Mode Terang (Background Putih)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="5"></circle>
+                            <line x1="12" y1="1" x2="12" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="23"></line>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                            <line x1="1" y1="12" x2="3" y2="12"></line>
+                            <line x1="21" y1="12" x2="23" y2="12"></line>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        </svg>
+                        <span>Terang</span>
+                    </button>
+                </div>
+                <div class="meta-author">
+                    <span class="meta-tag">TUGAS AKHIR</span>
+                    <span class="meta-name">Maulana Fatih Abiyyin | UNDIP</span>
+                </div>
+                <div class="meta-pill">
+                    <span class="pulse-dot"></span>
+                    <span>v1.0 (10k MC Paths)</span>
+                </div>
+                <div class="user-avatar" title="Maulana Fatih Abiyyin">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-wrapper">
+
+        <!-- ============================================================== -->
+        <!-- PAGE 1: BERANDA & UPLOAD -->
+        <!-- ============================================================== -->
+        <section id="page-upload" class="page-view active">
+            <div class="hero-glow-container">
+                <div class="glow-bg glow-cyan"></div>
+                <div class="glow-bg glow-purple"></div>
+
+                <div class="hero-content">
+                    <h1 class="hero-title">
+                        Heston-Kou Stock Price <span class="gradient-text">Modelling</span>
+                    </h1>
+                    <p class="hero-subtitle">
+                        Unggah data historis saham untuk memulai simulasi Monte Carlo dan estimasi parameter.
+                    </p>
+                </div>
+
+                <!-- Upload Card -->
+                <div class="upload-container">
+                    <div class="upload-dropzone" id="uploadZone">
+                        <div class="dropzone-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                        </div>
+                        <p class="dropzone-title">Tarik &amp; lepas file CSV di sini</p>
+                        <p class="dropzone-or">atau <span class="link-cyan" id="chooseFileBtn">Pilih File</span> dari perangkat</p>
+                        
+                        <div class="format-pill">
+                            <span class="info-icon">ℹ</span>
+                            <span>Format: Kolom <strong>Date</strong> &amp; <strong>Adj Close</strong> (.csv)</span>
+                        </div>
+                        <input type="file" id="fileInput" accept=".csv" hidden>
+                    </div>
+
+                    <!-- Selected File Bar -->
+                    <div class="file-status-bar" id="fileStatusBar" style="display:none;">
+                        <div class="file-left">
+                            <div class="doc-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    <polyline points="10 9 9 9 8 9"></polyline>
+                                </svg>
+                            </div>
+                            <div class="file-details">
+                                <span class="file-name" id="fileNameDisplay">olah dataa.csv</span>
+                                <span class="file-separator">•</span>
+                                <span class="file-count" id="fileRowCountDisplay">237 baris</span>
+                                <div class="file-ready-tag">
+                                    <span class="dot-green">●</span>
+                                    <span>Siap dianalisis</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="file-right">
+                            <button class="btn-change-file" id="changeFileBtn">
+                                <span>⇄</span> Ganti File
+                            </button>
+                            <button class="btn-remove-file" id="removeFileBtn" title="Hapus file">✕</button>
+                        </div>
+                    </div>
+
+                    <!-- Action Button -->
+                    <button class="btn-analyze" id="startAnalyzeBtn">
+                        <span>Mulai Analisis</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- CSV Format Guide & Template Card -->
+                <div class="csv-guide-container">
+                    <div class="csv-guide-header">
+                        <div class="guide-title-flex">
+                            <span class="guide-icon">📋</span>
+                            <div class="guide-text-box">
+                                <h3>Contoh &amp; Format File CSV</h3>
+                                <p>Pastikan format data sesuai ketentuan berikut agar analisis tidak mengalami error.</p>
+                            </div>
+                        </div>
+                        <a href="/api/download-template" class="btn-download-template" id="downloadTemplateBtn" download="template_saham_heston_kou.csv">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <span>Unduh Contoh CSV</span>
+                        </a>
+                    </div>
+
+                    <!-- Guidelines grid -->
+                    <div class="guide-rules-grid">
+                        <div class="rule-item">
+                            <span class="rule-num">1</span>
+                            <div>
+                                <strong>Nama Kolom Wajib:</strong>
+                                <span>Kolom <code>Date</code> (tanggal) dan <code>Adj Close</code> atau <code>Close</code> (harga saham).</span>
+                            </div>
+                        </div>
+                        <div class="rule-item">
+                            <span class="rule-num">2</span>
+                            <div>
+                                <strong>Format Tanggal:</strong>
+                                <span>Format <code>DD/MM/YYYY</code> (contoh: <code>13/01/2025</code>) atau <code>YYYY-MM-DD</code>.</span>
+                            </div>
+                        </div>
+                        <div class="rule-item">
+                            <span class="rule-num">3</span>
+                            <div>
+                                <strong>Format Angka Harga:</strong>
+                                <span>Angka positif (contoh: <code>408</code>, <code>1075</code> atau dengan koma/titik ribuan: <code>1,075.00</code>).</span>
+                            </div>
+                        </div>
+                        <div class="rule-item">
+                            <span class="rule-num">4</span>
+                            <div>
+                                <strong>Pemisah Kolom:</strong>
+                                <span>Mendukung pemisah titik koma (<code>;</code>) maupun koma (<code>,</code>).</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Code / Table Preview -->
+                    <div class="csv-preview-box">
+                        <div class="preview-box-header">
+                            <span class="preview-tag">Contoh Teks Isi File CSV (Kolom Date &amp; Adj Close)</span>
+                            <button type="button" class="btn-copy-sample" id="btnCopySample" title="Salin contoh teks">
+                                📋 Salin Contoh Teks
+                            </button>
+                        </div>
+                        <pre class="csv-code-block" id="sampleCsvCode"><code>Date;Adj Close
+13/01/2025;408
+14/01/2025;418
+15/01/2025;406
+16/01/2025;410
+17/01/2025;400
+20/01/2025;404
+21/01/2025;408
+22/01/2025;408</code></pre>
+                    </div>
+
+                    <!-- Quick shortcut button to test sample data immediately -->
+                    <div class="quick-sample-row">
+                        <span class="quick-label">Belum punya data CSV sendiri?</span>
+                        <button type="button" class="btn-quick-sample" id="btnUseSampleData">
+                            <span>⚡</span> Gunakan Data Contoh Bawaan (237 Baris)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================== -->
+        <!-- PAGE 2: SIMULASI & LOADING -->
+        <!-- ============================================================== -->
+        <section id="page-loading" class="page-view">
+            <div class="loading-grid">
+                <!-- Left Sidebar: Engine Status -->
+                <aside class="engine-sidebar">
+                    <div class="sidebar-header">
+                        <span class="status-label">ENGINE STATUS</span>
+                        <span class="status-online"><span class="dot-green">●</span> ONLINE</span>
+                    </div>
+
+                    <div class="engine-specs">
+                        <div class="spec-item">
+                            <span class="spec-key">STOCHASTIC_CORE</span>
+                            <span class="spec-val cyan">Kou-Heston SDE v2.4</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-key">DISCRETIZATION</span>
+                            <span class="spec-val cyan">Euler-Maruyama (dt=1/252)</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-key">HARDWARE_CONCURRENCY</span>
+                            <span class="spec-val">8 WebWorkers / 10k Paths</span>
+                        </div>
+                        <div class="spec-item">
+                            <div class="spec-flex">
+                                <span class="spec-key">Convergence Rate</span>
+                                <span class="spec-val green">O(1/√N)</span>
+                            </div>
+                            <!-- Mini Sparkline -->
+                            <div class="sparkline-container">
+                                <svg width="100%" height="32" viewBox="0 0 160 32" fill="none">
+                                    <path d="M0 28 Q 40 24, 80 18 T 160 6" stroke="#10b981" stroke-width="2" fill="none" />
+                                    <path d="M0 28 Q 40 24, 80 18 T 160 6 L 160 32 L 0 32 Z" fill="rgba(16, 185, 129, 0.08)" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ensemble Visual Card -->
+                    <div class="ensemble-preview-card">
+                        <div class="canvas-fallback" id="ensembleCanvasBox">
+                            <div class="starburst-center"></div>
+                            <span class="ensemble-tag">Ensemble Buffer <span id="ensemblePctText">52.0%</span></span>
+                        </div>
+                    </div>
+                    <p class="sidebar-caption">
+                        Generating non-Gaussian heavy-tailed distributions with asymmetric jumps (p=0.42, η₁=12.5, η₂=8.2).
+                    </p>
+                </aside>
+
+                <!-- Right Main: Progress & Pipeline Steps -->
+                <div class="pipeline-main">
+                    <!-- Top Circular Gauge & Summary -->
+                    <div class="pipeline-header">
+                        <div class="gauge-wrapper">
+                            <div class="circle-gauge">
+                                <svg width="150" height="150" viewBox="0 0 150 150">
+                                    <circle class="gauge-track" cx="75" cy="75" r="62" />
+                                    <circle class="gauge-fill" id="gaugeCircle" cx="75" cy="75" r="62" />
+                                </svg>
+                                <div class="gauge-inner-text">
+                                    <span class="gauge-pct" id="loadingPct">53%</span>
+                                    <span class="gauge-status" id="loadingSubtext">ESTIMATING MLE</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-intro">
+                            <h2>Memproses Data Saham...</h2>
+                            <p class="pipeline-desc">
+                                Menjalankan simulasi Monte Carlo dengan <strong>10,000 lintasan</strong> stokastik dan kalibrasi parameter lompatan ganda eksponensial Kou.
+                            </p>
+                            <div class="worker-pill">
+                                <span class="dot-cyan">●</span>
+                                <span>CPU Worker: Active • Seed: 42 • Iteration: <span id="iterationCount">5,200</span> / 10,000</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Steps List -->
+                    <div class="pipeline-steps">
+                        <div class="pipe-step done" id="step1">
+                            <div class="step-badge">✓</div>
+                            <div class="step-info">
+                                <span class="step-title">Membaca dan memvalidasi data CSV</span>
+                                <span class="step-sub">Integritas data deret waktu terkonfirmasi • Log-return dihitung</span>
+                            </div>
+                            <div class="step-tag tag-green">● Selesai (237 baris)</div>
+                        </div>
+
+                        <div class="pipe-step done" id="step2">
+                            <div class="step-badge">✓</div>
+                            <div class="step-info">
+                                <span class="step-title">Deteksi Jump menggunakan MAD</span>
+                                <span class="step-sub">Median Absolute Deviation filter k=3.0 • Outliers dipisahkan</span>
+                            </div>
+                            <div class="step-tag tag-green">● 17 Lompatan Terdeteksi</div>
+                        </div>
+
+                        <div class="pipe-step running" id="step3">
+                            <div class="step-badge spinner">↻</div>
+                            <div class="step-info">
+                                <span class="step-title">Estimasi Parameter Kou &amp; Heston</span>
+                                <span class="step-sub">Mengoptimalkan log-likelihood parameter κ, θ, σ_v, ρ, λ, p, η₁, η₂</span>
+                            </div>
+                            <div class="step-tag tag-purple">● Mengestimasi MLE...</div>
+                        </div>
+
+                        <div class="pipe-step pending" id="step4">
+                            <div class="step-badge">⚄</div>
+                            <div class="step-info">
+                                <span class="step-title">Simulasi Monte Carlo (10,000 paths)</span>
+                                <span class="step-sub">Pembangkitan lintasan diskretisasi waktu T=1 tahun dengan lompatan poisson majemuk</span>
+                            </div>
+                            <div class="step-tag tag-muted">Menunggu</div>
+                        </div>
+
+                        <div class="pipe-step pending" id="step5">
+                            <div class="step-badge">≈</div>
+                            <div class="step-info">
+                                <span class="step-title">Analisis Fungsi Densitas Transisi</span>
+                                <span class="step-sub">Transformasi Fourier balik &amp; evaluasi densitas probabilitas marginal</span>
+                            </div>
+                            <div class="step-tag tag-muted">Menunggu</div>
+                        </div>
+
+                        <div class="pipe-step pending" id="step6">
+                            <div class="step-badge">⊞</div>
+                            <div class="step-info">
+                                <span class="step-title">Menyiapkan hasil &amp; grafik interaktif</span>
+                                <span class="step-sub">Konstruksi kurva konvergensi, selang kepercayaan 95%, dan dashboard metrik</span>
+                            </div>
+                            <div class="step-tag tag-muted">Menunggu</div>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Timer & Cancel -->
+                    <div class="pipeline-footer">
+                        <div class="timer-info">
+                            <span>⏳ Estimasi sisa waktu: <strong><span id="remainingSec">~14</span> detik</strong></span>
+                            <span class="file-separator">•</span>
+                            <span>Total durasi: ~30 detik</span>
+                        </div>
+                        <button class="btn-cancel" id="cancelSimBtn">⊗ Batal</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================== -->
+        <!-- PAGE 3: DASHBOARD HASIL -->
+        <!-- ============================================================== -->
+        <section id="page-dashboard" class="page-view">
+            <!-- Secondary Status Strip -->
+            <div class="dashboard-strip">
+                <div class="strip-left">
+                    <span class="strip-pill purple-border">THESIS BUILD: 2</span>
+                    <span class="strip-divider">|</span>
+                    <span class="strip-text">EXECUTION RUNSET OUTPUT</span>
+                    <span class="strip-divider">|</span>
+                    <span class="strip-pill green-text"><span class="dot-green">●</span> Simulasi Selesai (10.000 Lintasan MC)</span>
+                </div>
+                <div class="strip-right">
+                    <span>Run Duration: <strong>12s</strong></span>
+                    <span class="strip-divider">•</span>
+                    <span class="green-text">STATUS: OK</span>
+                    <span class="strip-divider">•</span>
+                    <span>Risk Profile: <strong class="red-text">HIGH</strong></span>
+                </div>
+            </div>
+
+            <!-- Dashboard Main Header -->
+            <div class="dashboard-header">
+                <div class="header-main-left">
+                    <div class="title-with-badges">
+                        <h2>Heston-Kou Analysis</h2>
+                        <span class="badge-purple">STOCHASTIC VOLATILITY</span>
+                        <span class="badge-cyan">DOUBLE EXPONENTIAL JUMP</span>
+                        <span class="badge-good-fit"><span class="dot-green">●</span> GOOD IN-SAMPLE FIT 93%</span>
+                    </div>
+                    <p class="header-desc">
+                        Hasil estimasi model difusi Heston dan lompatan Kou berdasarkan data runtun waktu historis 237 hari bursa dengan simulasi integrasi Monte Carlo.
+                    </p>
+                </div>
+                <div class="header-main-right">
+                    <button class="btn-upload-new" id="dashUploadNewBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <span>Upload Data Baru</span>
+                    </button>
+                    <button class="btn-export" id="exportPdfBtn">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                            <polyline points="16 6 12 2 8 6"></polyline>
+                            <line x1="12" y1="2" x2="12" y2="15"></line>
+                        </svg>
+                        <span>EXPORT</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4 KPI Metric Cards -->
+            <div class="kpi-grid">
+                <!-- Card 1 -->
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-label">HARGA AWAL (S₀)</span>
+                        <div class="kpi-icon-box">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                        </div>
+                    </div>
+                    <div class="kpi-val" id="dashS0">Rp 880</div>
+                    <div class="kpi-sub" id="dashS0Sub">2023-11-28 • TITIK AWAL WAKTU T=0</div>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-label">TARGET HARGA FDT</span>
+                        <div class="kpi-icon-box">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
+                        </div>
+                    </div>
+                    <div class="kpi-val-row">
+                        <span class="kpi-val" id="dashTargetFDT">Rp 1.075</span>
+                        <span class="kpi-tag-green" id="dashTargetPct">+22.16%</span>
+                    </div>
+                    <div class="kpi-sub">EKSPEKTASI VALUE @ JUMP METRIC</div>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-label">PROBABILITAS NAIK (MC)</span>
+                        <div class="kpi-icon-box">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
+                        </div>
+                    </div>
+                    <div class="kpi-val cyan-highlight" id="dashProbMC">83.87%</div>
+                    <div class="kpi-sub" id="dashProbMCSub">8.387 DARI 10.000 SIMULASI &gt; S₀</div>
+                </div>
+
+                <!-- Card 4 -->
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-label">PROBABILITAS NAIK (FDT)</span>
+                        <div class="kpi-icon-box">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M4 4h16l-8 8 8 8H4"/></svg>
+                        </div>
+                    </div>
+                    <div class="kpi-val green-highlight" id="dashProbFDT">83.65%</div>
+                    <div class="kpi-sub">INTEGRASI NUMERIK TRANSFORMATION</div>
+                </div>
+            </div>
+
+            <!-- Charts Row 1: MC Path & FDT -->
+            <div class="charts-2col">
+                <!-- Left: Monte Carlo Path -->
+                <div class="quant-chart-card">
+                    <div class="chart-card-header">
+                        <div>
+                            <div class="chart-title-flex">
+                                <span class="dot-purple">●</span>
+                                <h3>Simulasi Monte Carlo — Pergerakan Harga Saham</h3>
+                            </div>
+                            <p class="chart-sub">Lintasan stokastik acak representatif (t = 1 s/d 237 hari kerja)</p>
+                        </div>
+                        <span class="chart-badge">T=1.0 TH • dt=1/237</span>
+                    </div>
+
+                    <div id="chartMCPlot" class="plotly-box"></div>
+
+                    <div class="chart-card-footer">
+                        <div class="chart-legend-row">
+                            <span><span class="dot-purple">●</span> Rata Lintasan Terverifikasi</span>
+                            <span><span class="dot-red">●</span> Titik Terendah</span>
+                            <span><span class="dot-green">●</span> Titik Tertinggi</span>
+                        </div>
+                        <span class="chart-meta-note">Diskritisasi: Euler-Maruyama</span>
+                    </div>
+                </div>
+
+                <!-- Right: FDT -->
+                <div class="quant-chart-card">
+                    <div class="chart-card-header">
+                        <div>
+                            <div class="chart-title-flex">
+                                <span class="dot-cyan">●</span>
+                                <h3>Fungsi Densitas Transisi Harga Akhir</h3>
+                            </div>
+                            <p class="chart-sub">Solusi analitik integral Fourier terbalik &amp; densitas transisi Kou</p>
+                        </div>
+                        <span class="chart-badge">f(X_T | S₀)</span>
+                    </div>
+
+                    <div id="chartFDTPlot" class="plotly-box"></div>
+
+                    <div class="chart-card-footer">
+                        <div class="chart-legend-row">
+                            <span><span class="dash-red">—</span> Garis Batas S₀</span>
+                            <span><span class="dash-cyan">—</span> Target Ekspektasi FDT</span>
+                        </div>
+                        <span class="chart-meta-note">Asymmetric Kurtosis: Kou Double Exponential</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Row 2: Distribution Histogram Full Width -->
+            <div class="quant-chart-card full-card">
+                <div class="chart-card-header">
+                    <div>
+                        <div class="chart-title-flex">
+                            <span class="bar-icon">📊</span>
+                            <h3>Distribusi Harga Akhir Monte Carlo</h3>
+                        </div>
+                        <p class="chart-sub">Frekuensi sebaran dari 10.000 terminal simulated harga saham pada hari ke-237</p>
+                    </div>
+                    <div class="hist-legend-badges">
+                        <span class="tag-outline" id="histBadgeS0">Harga Awal: Rp 880</span>
+                        <span class="tag-outline" id="histBadgeMean">Rata-rata: Rp 4.407</span>
+                        <span class="tag-outline red-border" id="histBadgeVaR">VaR 95%: Rp 765</span>
+                        <span class="tag-outline green-border" id="histBadgeP95">P95%: Rp 12.000</span>
+                    </div>
+                </div>
+
+                <div id="chartHistPlot" class="plotly-box-tall"></div>
+            </div>
+
+            <!-- Tables Row 1: Parameter Kou & Heston -->
+            <div class="tables-2col">
+                <!-- Kou Parameters -->
+                <div class="quant-table-card">
+                    <div class="table-card-header">
+                        <div class="card-icon-title">
+                            <span class="icon-purple-box">⚡</span>
+                            <div>
+                                <h3>Parameter Model Kou (Jump)</h3>
+                                <p>Komponen Lompatan Eksponensial Ganda</p>
+                            </div>
+                        </div>
+                        <span class="badge-subtle">5 PARAMETER</span>
+                    </div>
+
+                    <table class="quant-table">
+                        <thead>
+                            <tr>
+                                <th>PARAMETER</th>
+                                <th>NILAI ESTIMASI</th>
+                                <th>KETERANGAN MATEMATIS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="kouParamsBody">
+                            <tr>
+                                <td>Lambda (λ)</td>
+                                <td class="val-green" id="kouLambda">17.0000</td>
+                                <td>Intensitas frekuensi jump / tahun</td>
+                            </tr>
+                            <tr>
+                                <td>p</td>
+                                <td class="val-green" id="kouP">0.8824</td>
+                                <td>Probabilitas Jump Naik (Upward Jump)</td>
+                            </tr>
+                            <tr>
+                                <td>q (1-p)</td>
+                                <td class="val-red" id="kouQ">0.1176</td>
+                                <td>Probabilitas Jump Turun (Downward Jump)</td>
+                            </tr>
+                            <tr>
+                                <td>Eta1 (η₁)</td>
+                                <td class="val-cyan" id="kouEta1">8.2405</td>
+                                <td>Rate eksponensial positif (1/η₁ = magnitude up)</td>
+                            </tr>
+                            <tr>
+                                <td>Eta2 (η₂)</td>
+                                <td class="val-cyan" id="kouEta2">8.1502</td>
+                                <td>Rate eksponensial negatif (1/η₂ = magnitude down)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Heston Parameters -->
+                <div class="quant-table-card">
+                    <div class="table-card-header">
+                        <div class="card-icon-title">
+                            <span class="icon-cyan-box">🌊</span>
+                            <div>
+                                <h3>Parameter Model Heston (Difusi)</h3>
+                                <p>Komponen Difusi Volatilitas Stokastik</p>
+                            </div>
+                        </div>
+                        <span class="badge-subtle">5 VARIABEL</span>
+                    </div>
+
+                    <table class="quant-table">
+                        <thead>
+                            <tr>
+                                <th>PARAMETER</th>
+                                <th>NILAI ESTIMASI</th>
+                                <th>KETERANGAN MATEMATIS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hestonParamsBody">
+                            <tr>
+                                <td>Kappa (κ)</td>
+                                <td class="val-cyan" id="hestonKappa">11.9513</td>
+                                <td>Kecepatan penyesuaian rata-rata (Mean Reversion)</td>
+                            </tr>
+                            <tr>
+                                <td>Theta (θ)</td>
+                                <td class="val-cyan" id="hestonTheta">0.2868</td>
+                                <td>Tingkat varians jangka panjang (Long-term Variance)</td>
+                            </tr>
+                            <tr>
+                                <td>Sigma_v (σ_v)</td>
+                                <td class="val-cyan" id="hestonSigmaV">0.6163</td>
+                                <td>Volatilitas proses varians (Vol of Vol)</td>
+                            </tr>
+                            <tr>
+                                <td>Rho (ρ)</td>
+                                <td class="val-red" id="hestonRho">-0.6361</td>
+                                <td>Korelasi Brownian Motion return harga vs varians</td>
+                            </tr>
+                            <tr>
+                                <td>Mu (μ)</td>
+                                <td class="val-green" id="hestonMu">1.9868</td>
+                                <td>Laju pengembalian tahunan (Annualized Drift)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Table Row 2: Probabilistic Statistics Full Width -->
+            <div class="quant-table-card full-card">
+                <div class="table-card-header">
+                    <div class="card-icon-title">
+                        <span class="icon-purple-box">📐</span>
+                        <div>
+                            <h3>Statistik Probabilistik Harga Akhir (Maturitas t = 237)</h3>
+                            <p>Distribusi terminal hasil 10.000 lintasan stokastik Monte Carlo</p>
+                        </div>
+                    </div>
+                    <span class="badge-subtle">Sampel: N = 10.000 Lintasan Acak</span>
+                </div>
+
+                <table class="quant-table full-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">STATISTIK METRIK</th>
+                            <th style="width: 25%;">NILAI ESTIMASI</th>
+                            <th style="width: 45%;">INTERPRETASI FINANSIAL</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statsTableBody">
+                        <tr>
+                            <td><strong>Harga Awal Saham (S₀)</strong></td>
+                            <td class="bold-white" id="statS0">Rp 880</td>
+                            <td>Harga penutupan awal periode observasi data historis</td>
+                        </tr>
+                        <tr>
+                            <td>Rata-rata Harga Akhir E[S_T]</td>
+                            <td class="val-green bold" id="statMean">Rp 4.407</td>
+                            <td>Ekspektasi nilai tengah pergerakan model dengan lompatan positif dominan</td>
+                        </tr>
+                        <tr>
+                            <td>Median (Q2)</td>
+                            <td class="val-cyan bold" id="statMedian">Rp 2.848</td>
+                            <td>Titik tengah 50% lintasan simulasi (kurva skewed ke kanan)</td>
+                        </tr>
+                        <tr>
+                            <td>Standar Deviasi (σ)</td>
+                            <td class="bold-white" id="statStd">Rp 5.403</td>
+                            <td>Tingkat dispersi sebaran harga akhir akibat volatilitas stokastik</td>
+                        </tr>
+                        <tr>
+                            <td>Persentil 5% (Value at Risk 95%)</td>
+                            <td class="val-red bold" id="statP05">Rp 765</td>
+                            <td>Batas kerugian terburuk pada tingkat kepercayaan 95%</td>
+                        </tr>
+                        <tr>
+                            <td>Persentil 95% (Upper Bound)</td>
+                            <td class="val-green bold" id="statP95">Rp 12.000</td>
+                            <td>Skenario optimis pergerakan harga akibat serangkaian jump naik</td>
+                        </tr>
+                        <tr class="highlight-row">
+                            <td><strong>Probabilitas Harga Naik [P(S_T &gt; S₀)]</strong></td>
+                            <td>
+                                <span class="badge-prob-btn" id="statProbBtn">83.87%</span>
+                            </td>
+                            <td class="val-green">Peluang sangat tinggi harga saham berakhir di atas modal awal</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Tables Row 3: Jump Naik & Jump Turun -->
+            <div class="tables-2col">
+                <!-- Jump Naik -->
+                <div class="quant-table-card">
+                    <div class="table-card-header">
+                        <div class="card-icon-title">
+                            <span class="icon-green-circle">↑</span>
+                            <div>
+                                <h3>Daftar Lompatan Naik</h3>
+                                <p id="jumpNaikSub">Terdeteksi 15 lompatan signifikan (p = 0.8824)</p>
+                            </div>
+                        </div>
+                        <span class="badge-green-pill" id="jumpNaikBadge">15 JUMP</span>
+                    </div>
+
+                    <div class="table-scroll-container">
+                        <table class="quant-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 15%;">NO</th>
+                                    <th style="width: 45%;">TANGGAL BURSA</th>
+                                    <th style="width: 40%;">BESARAN RETURN EKSTREM</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableJumpNaikBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Jump Turun -->
+                <div class="quant-table-card">
+                    <div class="table-card-header">
+                        <div class="card-icon-title">
+                            <span class="icon-red-circle">↓</span>
+                            <div>
+                                <h3>Daftar Lompatan Turun</h3>
+                                <p id="jumpTurunSub">Terdeteksi 2 lompatan signifikan (q = 0.1176)</p>
+                            </div>
+                        </div>
+                        <span class="badge-red-pill" id="jumpTurunBadge">2 JUMP</span>
+                    </div>
+
+                    <div class="table-scroll-container">
+                        <table class="quant-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 15%;">NO</th>
+                                    <th style="width: 45%;">TANGGAL BURSA</th>
+                                    <th style="width: 40%;">BESARAN RETURN EKSTREM</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableJumpTurunBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="info-callout">
+                        <span class="info-callout-icon">ℹ</span>
+                        <p><strong>Kriteria Deteksi Lompatan:</strong> Ambang batas difiltrasi secara otomatis menggunakan filter MAD (Median Absolute Deviation) dengan batas k=4.0 terhadap log-return aktual.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Action Bar -->
+            <div class="simulation-rerun-bar">
+                <div class="rerun-left">
+                    <div class="rerun-icon">⚄</div>
+                    <div>
+                        <h4>Ubah Parameter &amp; Simulasi Ulang?</h4>
+                        <p>Atur ulang jumlah lintasan Monte Carlo (hingga 50.000) atau batas toleransi kalibrasi.</p>
+                    </div>
+                </div>
+                <div class="rerun-right">
+                    <button class="btn-rerun-outline" id="btnAdvancedSettings">Pengaturan Lanjutan</button>
+                    <button class="btn-rerun-filled" id="btnRerunSim">
+                        <span>↻</span> Jalankan Ulang
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </div><!-- /.main-wrapper -->
+
+    <!-- GLOBAL FOOTER -->
+    <footer class="quant-footer">
+        <div class="footer-container">
+            <div class="footer-left">
+                <strong>Tugas Akhir — Maulana Fatih Abiyyin | Universitas Diponegoro</strong>
+                <p>Departemen Matematika / Statistika — Simulasi Monte Carlo &amp; Estimasi Parameter Difusi-Lompatan</p>
+            </div>
+            <div class="footer-right">
+                <div class="terminal-badge">
+                    <code>Powered by Heston-Kou Stochastic Model (Double Exponential Jump-Diffusion &amp; Stochastic Volatility)</code>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/script.js?v=2.4"></script>
+</body>
+</html>
