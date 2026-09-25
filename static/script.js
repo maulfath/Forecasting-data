@@ -1,5 +1,5 @@
 // ==========================================================================
-// Heston-Kou Quant Platform — Frontend Controller
+// HK QuantLab — Heston-Kou Stochastic Analytics Frontend Controller
 // ==========================================================================
 
 let currentData = null;
@@ -32,20 +32,19 @@ const loadingSubtext = document.getElementById('loadingSubtext');
 const iterationCount = document.getElementById('iterationCount');
 const remainingSec = document.getElementById('remainingSec');
 const cancelSimBtn = document.getElementById('cancelSimBtn');
-const ensemblePctText = document.getElementById('ensemblePctText');
 
 // Dashboard Elements
 const dashUploadNewBtn = document.getElementById('dashUploadNewBtn');
 const exportPdfBtn = document.getElementById('exportPdfBtn');
-const btnRerunSim = document.getElementById('btnRerunSim');
-const btnAdvancedSettings = document.getElementById('btnAdvancedSettings');
 
 // ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
+    document.body.classList.add('page-upload-mode');
     setupThemeToggle();
     setupTabNavigation();
     setupFileUpload();
     setupDashboardActions();
+    setupMonteCarloControls();
 
     // Fetch initial/default results so Dashboard is ready to preview immediately
     fetchDefaultResults();
@@ -119,6 +118,8 @@ function setupTabNavigation() {
 }
 
 function switchPage(pageId) {
+    document.body.classList.toggle('page-upload-mode', pageId === 'page-upload');
+
     // Update active tab button
     navTabs.forEach(tab => {
         if (tab.getAttribute('data-target') === pageId) {
@@ -330,7 +331,6 @@ function startLoadingAnimation() {
 
             iterationCount.textContent = iteration.toLocaleString('id-ID');
             remainingSec.textContent = `~${remaining}`;
-            ensemblePctText.textContent = `${pct}.0%`;
 
             if (pct < 30) {
                 updateGauge(pct, 'READING CSV');
@@ -358,7 +358,6 @@ function finishLoadingAndDisplay(data) {
     updateGauge(100, 'SELESAI');
     iterationCount.textContent = '10.000';
     remainingSec.textContent = '0';
-    ensemblePctText.textContent = '100.0%';
 
     for (let i = 1; i <= 6; i++) {
         setStepState(`step${i}`, 'done', '● Selesai');
@@ -441,6 +440,18 @@ function updateDashboardKPIs(data) {
     const fdt = data.fdt || {};
     const jump = data.jump_detection || {};
 
+    const nObs = data.metadata?.n_obs || (data.monte_carlo?.days_count) || 237;
+    const nSims = data.monte_carlo?.n_sims || 10000;
+
+    // Dynamic observation days and paths across headers
+    const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setTxt('dashObsCount', nObs);
+    setTxt('mcDaysCount', nObs);
+    setTxt('histDaysCount', nObs);
+    setTxt('statDaysCount', nObs);
+    setTxt('histSimCount', nSims.toLocaleString('id-ID'));
+    setTxt('statBadgeCount', nSims.toLocaleString('id-ID'));
+
     // 1. KPI Cards
     const S0 = stats.S0 || 880;
     const targetFDT = fdt.target_price || 1075;
@@ -464,7 +475,6 @@ function updateDashboardKPIs(data) {
     if (elProbFDT) elProbFDT.textContent = (probFDT * 100).toFixed(2) + '%';
 
     // 2. Kou Parameters Table
-    const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     setTxt('kouLambda', (kou.lambda || 17.0).toFixed(4));
     setTxt('kouP', (kou.p || 0.8824).toFixed(4));
     setTxt('kouQ', (kou.q || 0.1176).toFixed(4));
@@ -524,6 +534,7 @@ function renderAllCharts(data) {
 function renderDashboard(data) {
     updateDashboardKPIs(data);
     renderAllCharts(data);
+    renderMultiPathTable(data.monte_carlo?.multi_comparison || [], data.monte_carlo?.paths || 10000);
 }
 
 function renderJumpTables(jump) {
@@ -531,21 +542,24 @@ function renderJumpTables(jump) {
     const turun = jump.lompatan_turun || [];
 
     // Header count badges
+    const totalJumps = naik.length + turun.length || 1;
     document.getElementById('jumpNaikBadge').textContent = `${naik.length} JUMP`;
-    document.getElementById('jumpNaikSub').textContent = `Terdeteksi ${naik.length} lompatan signifikan (p = ${((naik.length / (naik.length + turun.length || 1))).toFixed(4)})`;
+    document.getElementById('jumpNaikSub').textContent = `Terdeteksi ${naik.length} lompatan signifikan (p = ${(naik.length / totalJumps).toFixed(4)})`;
 
     document.getElementById('jumpTurunBadge').textContent = `${turun.length} JUMP`;
-    document.getElementById('jumpTurunSub').textContent = `Terdeteksi ${turun.length} lompatan signifikan (q = ${((turun.length / (naik.length + turun.length || 1))).toFixed(4)})`;
+    document.getElementById('jumpTurunSub').textContent = `Terdeteksi ${turun.length} lompatan signifikan (q = ${(turun.length / totalJumps).toFixed(4)})`;
 
     // Populate Naik
     const tbodyNaik = document.getElementById('tableJumpNaikBody');
     tbodyNaik.innerHTML = '';
     naik.forEach((item, idx) => {
         const tr = document.createElement('tr');
-        const ret = typeof item.Return === 'number' ? item.Return : parseFloat(item.Return || 0);
+        const rawRet = item.return !== undefined ? item.return : (item.Return !== undefined ? item.Return : 0);
+        const ret = typeof rawRet === 'number' ? rawRet : parseFloat(rawRet || 0);
+        const tgl = item.tanggal || item.Tanggal || item.date || item.Date || '-';
         tr.innerHTML = `
             <td>${String(idx + 1).padStart(2, '0')}</td>
-            <td>${item.Tanggal || '-'}</td>
+            <td>${tgl}</td>
             <td class="val-green">+${(ret * 100).toFixed(2)}%</td>
         `;
         tbodyNaik.appendChild(tr);
@@ -556,10 +570,12 @@ function renderJumpTables(jump) {
     tbodyTurun.innerHTML = '';
     turun.forEach((item, idx) => {
         const tr = document.createElement('tr');
-        const ret = typeof item.Return === 'number' ? item.Return : parseFloat(item.Return || 0);
+        const rawRet = item.return !== undefined ? item.return : (item.Return !== undefined ? item.Return : 0);
+        const ret = typeof rawRet === 'number' ? rawRet : parseFloat(rawRet || 0);
+        const tgl = item.tanggal || item.Tanggal || item.date || item.Date || '-';
         tr.innerHTML = `
             <td>${String(idx + 1).padStart(2, '0')}</td>
-            <td>${item.Tanggal || '-'}</td>
+            <td>${tgl}</td>
             <td class="val-red">${(ret * 100).toFixed(2)}%</td>
         `;
         tbodyTurun.appendChild(tr);
@@ -615,7 +631,7 @@ const plotConfig = {
     displayModeBar: false
 };
 
-// 1. Monte Carlo Representative Path Chart
+// 1. Monte Carlo Path Chart with Multi-Path & Ensemble Support
 function renderMonteCarloChart(mc, S0) {
     const path = mc.representative_path || [];
     const timeGrid = mc.time_grid || Array.from({ length: path.length }, (_, i) => i);
@@ -623,57 +639,112 @@ function renderMonteCarloChart(mc, S0) {
     if (path.length === 0) return;
 
     const isLight = document.body.classList.contains('light-theme');
+    const showEnsemble = document.getElementById('toggleEnsemblePaths')?.checked || false;
+    const showBand = document.getElementById('toggleConfidenceBand')?.checked !== false;
+
+    const traces = [];
+
+    // 1. Confidence Band (P05 to P95 Ribbon)
+    if (showBand && mc.confidence_band && mc.confidence_band.p05 && mc.confidence_band.p95) {
+        const p05 = mc.confidence_band.p05;
+        const p95 = mc.confidence_band.p95;
+
+        // Lower bound line (transparent line for fill reference)
+        traces.push({
+            x: timeGrid,
+            y: p05,
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: 'rgba(0,0,0,0)', width: 0 },
+            showlegend: false,
+            hoverinfo: 'skip'
+        });
+
+        // Upper bound line with fill down to p05
+        traces.push({
+            x: timeGrid,
+            y: p95,
+            type: 'scatter',
+            mode: 'lines',
+            fill: 'tonexty',
+            fillcolor: isLight ? 'rgba(124, 58, 237, 0.08)' : 'rgba(139, 92, 246, 0.12)',
+            line: { color: isLight ? 'rgba(124, 58, 237, 0.3)' : 'rgba(139, 92, 246, 0.3)', width: 1, dash: 'dot' },
+            name: 'Pita Keyakinan 90% (P05-P95)',
+            hovertemplate: 'Batas Atas P95: Rp %{y:,.0f}<extra></extra>'
+        });
+    }
+
+    // 2. Ensemble Sample Paths (10 sample stochastic paths)
+    if (showEnsemble && mc.sample_paths && Array.isArray(mc.sample_paths)) {
+        const ensembleColor = isLight ? 'rgba(2, 132, 199, 0.22)' : 'rgba(56, 189, 248, 0.2)';
+        mc.sample_paths.forEach((sp, idx) => {
+            traces.push({
+                x: timeGrid,
+                y: sp,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: ensembleColor, width: 1.1 },
+                showlegend: false,
+                hoverinfo: 'skip'
+            });
+        });
+    }
+
+    // 3. Representative Path (Bold line)
+    traces.push({
+        x: timeGrid,
+        y: path,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: isLight ? '#7c3aed' : '#a78bfa', width: 2.4 },
+        name: 'Lintasan Representatif',
+        hovertemplate: 'Hari ke-%{x}<br>Harga: Rp %{y:,.0f}<extra></extra>'
+    });
+
+    // 4. Initial Price S0
+    traces.push({
+        x: [0, timeGrid[timeGrid.length - 1]],
+        y: [S0, S0],
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: isLight ? '#64748b' : '#94a3b8', width: 1.5, dash: 'dash' },
+        name: `Harga Awal (Rp ${Math.round(S0).toLocaleString('id-ID')})`,
+        hovertemplate: `Harga Awal S<sub>0</sub>: Rp ${Math.round(S0).toLocaleString('id-ID')}<extra></extra>`
+    });
+
+    // Min & Max Markers
     const minVal = Math.min(...path);
     const maxVal = Math.max(...path);
     const minIdx = path.indexOf(minVal);
     const maxIdx = path.indexOf(maxVal);
 
-    const traces = [
-        // Path line with gradient fill
-        {
-            x: timeGrid,
-            y: path,
-            type: 'scatter',
-            mode: 'lines',
-            line: { color: isLight ? '#7c3aed' : '#a78bfa', width: 2.2 },
-            fill: 'tozeroy',
-            fillcolor: isLight ? 'rgba(124, 58, 237, 0.08)' : 'rgba(139, 92, 246, 0.14)',
-            name: 'Lintasan MC',
-            hovertemplate: 'Hari ke-%{x}<br>Harga: Rp %{y:,.0f}<extra></extra>'
-        },
-        // Initial Price S0
-        {
-            x: [0, timeGrid[timeGrid.length - 1]],
-            y: [S0, S0],
-            type: 'scatter',
-            mode: 'lines',
-            line: { color: isLight ? '#64748b' : '#94a3b8', width: 1.5, dash: 'dash' },
-            name: `Harga Awal (Rp ${Math.round(S0).toLocaleString('id-ID')})`,
-            hovertemplate: `Harga Awal S<sub>0</sub>: Rp ${Math.round(S0).toLocaleString('id-ID')}<extra></extra>`
-        },
-        // Min Point Marker
-        {
-            x: [timeGrid[minIdx]],
-            y: [minVal],
-            type: 'scatter',
-            mode: 'markers',
-            marker: { color: '#ef4444', size: 8, line: { color: isLight ? '#ffffff' : '#0f172a', width: 1.5 } },
-            name: 'Titik Terendah',
-            hovertemplate: `Terendah: Rp ${Math.round(minVal).toLocaleString('id-ID')}<extra></extra>`
-        },
-        // Max Point Marker
-        {
-            x: [timeGrid[maxIdx]],
-            y: [maxVal],
-            type: 'scatter',
-            mode: 'markers',
-            marker: { color: '#10b981', size: 8, line: { color: isLight ? '#ffffff' : '#0f172a', width: 1.5 } },
-            name: 'Titik Tertinggi',
-            hovertemplate: `Tertinggi: Rp ${Math.round(maxVal).toLocaleString('id-ID')}<extra></extra>`
-        }
-    ];
+    traces.push({
+        x: [timeGrid[minIdx]],
+        y: [minVal],
+        type: 'scatter',
+        mode: 'markers',
+        marker: { color: '#ef4444', size: 8, line: { color: isLight ? '#ffffff' : '#0f172a', width: 1.5 } },
+        name: 'Titik Terendah',
+        hovertemplate: `Terendah: Rp ${Math.round(minVal).toLocaleString('id-ID')}<extra></extra>`
+    });
+
+    traces.push({
+        x: [timeGrid[maxIdx]],
+        y: [maxVal],
+        type: 'scatter',
+        mode: 'markers',
+        marker: { color: '#10b981', size: 8, line: { color: isLight ? '#ffffff' : '#0f172a', width: 1.5 } },
+        name: 'Titik Tertinggi',
+        hovertemplate: `Tertinggi: Rp ${Math.round(maxVal).toLocaleString('id-ID')}<extra></extra>`
+    });
 
     const baseLayout = getPlotLayout();
+    const allVals = [minVal, maxVal, S0];
+    if (mc.confidence_band?.p95) allVals.push(...mc.confidence_band.p95);
+    if (mc.confidence_band?.p05) allVals.push(...mc.confidence_band.p05);
+    const plotMin = Math.max(0, Math.floor(Math.min(...allVals) * 0.9));
+    const plotMax = Math.ceil(Math.max(...allVals) * 1.12);
+
     const layout = {
         ...baseLayout,
         xaxis: {
@@ -684,7 +755,7 @@ function renderMonteCarloChart(mc, S0) {
             ...baseLayout.yaxis,
             title: { text: 'Harga Saham (Rp)', standoff: 12, font: { size: 12, color: isLight ? '#0f172a' : '#94a3b8' } },
             tickformat: ',d',
-            range: [Math.max(0, Math.floor(minVal - 250)), Math.ceil(maxVal * 1.18)]
+            range: [plotMin, plotMax]
         },
         annotations: [
             {
@@ -701,7 +772,6 @@ function renderMonteCarloChart(mc, S0) {
                 borderpad: 3,
                 showarrow: false
             },
-            // Posisikan label Min di ATAS titik merah agar tidak menabrak sumbu X atau angka tick
             {
                 x: timeGrid[minIdx],
                 y: minVal,
@@ -721,6 +791,113 @@ function renderMonteCarloChart(mc, S0) {
     };
 
     Plotly.newPlot('chartMCPlot', traces, layout, plotConfig);
+}
+
+// Render Tabel Analisis Konvergensi Multi-Lintasan
+function renderMultiPathTable(comparisons, activePaths = 10000) {
+    const tbody = document.getElementById('multiPathTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (!comparisons || comparisons.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Data konvergensi tidak tersedia</td></tr>';
+        return;
+    }
+
+    const minSE = Math.min(...comparisons.map(c => c.standard_error || 999999));
+
+    comparisons.forEach(c => {
+        const tr = document.createElement('tr');
+        const isActive = c.n_paths === activePaths;
+        if (isActive) tr.classList.add('highlight-row');
+
+        const isBest = c.standard_error === minSE;
+        const seClass = isBest ? 'badge-conv-se best' : 'badge-conv-se';
+        const statusText = isBest
+            ? '<span class="val-green">● Konvergen Tertinggi</span>'
+            : (c.n_paths >= 10000 ? '<span class="val-cyan">● Stabil</span>' : '<span style="color:var(--text-muted)">○ Estimasi Cepat</span>');
+
+        tr.innerHTML = `
+            <td><strong>${c.n_paths.toLocaleString('id-ID')}</strong> ${isActive ? '<span style="color:var(--accent-purple);font-size:10px;font-weight:700;">(Aktif)</span>' : ''}</td>
+            <td class="val-green bold">Rp ${Math.round(c.mean_final).toLocaleString('id-ID')}</td>
+            <td class="val-cyan">Rp ${Math.round(c.median_final).toLocaleString('id-ID')}</td>
+            <td>Rp ${Math.round(c.std_final).toLocaleString('id-ID')}</td>
+            <td><span class="${seClass}">± Rp ${c.standard_error.toFixed(2)}</span></td>
+            <td class="val-red">Rp ${Math.round(c.p05).toLocaleString('id-ID')}</td>
+            <td class="val-green">${(c.prob_up * 100).toFixed(2)}%</td>
+            <td>${statusText}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function setupMonteCarloControls() {
+    const pills = document.querySelectorAll('.mc-path-pill');
+    pills.forEach(pill => {
+        pill.addEventListener('click', async () => {
+            const paths = parseInt(pill.getAttribute('data-paths'), 10);
+            pills.forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+
+            const metaNote = document.getElementById('mcMetaNote');
+            if (metaNote) metaNote.textContent = `Euler-Maruyama • N=${paths.toLocaleString('id-ID')}`;
+
+            if (currentData && currentData.heston_params && currentData.kou_params) {
+                const payload = {
+                    paths: paths,
+                    S0: currentData.statistics?.S0 || 880,
+                    V0: currentData.statistics?.V0 || 0.05,
+                    kappa: currentData.heston_params.kappa,
+                    theta: currentData.heston_params.theta,
+                    sigma_v: currentData.heston_params.sigma_v,
+                    rho: currentData.heston_params.rho,
+                    mu: currentData.heston_params.mu,
+                    lambda: currentData.kou_params.lambda,
+                    p: currentData.kou_params.p,
+                    eta1: currentData.kou_params.eta1,
+                    eta2: currentData.kou_params.eta2
+                };
+
+                try {
+                    const res = await fetch('/api/simulate-mc', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const mcRes = await res.json();
+                    if (mcRes.monte_carlo) {
+                        currentData.monte_carlo = mcRes.monte_carlo;
+                        currentData.statistics = mcRes.statistics;
+                        currentData.histogram = mcRes.histogram;
+
+                        updateDashboardKPIs(currentData);
+                        renderMonteCarloChart(currentData.monte_carlo, currentData.statistics.S0);
+                        renderHistogramChart(currentData.histogram, currentData.statistics, currentData.statistics.S0);
+                        renderMultiPathTable(currentData.monte_carlo.multi_comparison, paths);
+                    }
+                } catch (err) {
+                    console.error('Error switching paths:', err);
+                }
+            }
+        });
+    });
+
+    const toggleEnsemble = document.getElementById('toggleEnsemblePaths');
+    if (toggleEnsemble) {
+        toggleEnsemble.addEventListener('change', () => {
+            if (currentData) {
+                renderMonteCarloChart(currentData.monte_carlo, currentData.statistics?.S0);
+            }
+        });
+    }
+
+    const toggleBand = document.getElementById('toggleConfidenceBand');
+    if (toggleBand) {
+        toggleBand.addEventListener('change', () => {
+            if (currentData) {
+                renderMonteCarloChart(currentData.monte_carlo, currentData.statistics?.S0);
+            }
+        });
+    }
 }
 
 // 2. FDT Curve Chart
@@ -995,14 +1172,6 @@ function setupDashboardActions() {
     cancelSimBtn.addEventListener('click', () => {
         stopLoadingAnimation();
         switchPage('page-upload');
-    });
-
-    btnRerunSim.addEventListener('click', () => {
-        executeAnalysis();
-    });
-
-    btnAdvancedSettings.addEventListener('click', () => {
-        alert('Pengaturan Lanjutan: Menggunakan 10.000 Lintasan Monte Carlo, dt=1/237, dan filter MAD k=4.0.');
     });
 
     exportPdfBtn.addEventListener('click', () => {

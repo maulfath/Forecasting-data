@@ -13,9 +13,146 @@ import io
 warnings.filterwarnings('ignore')
 
 
-def run_analysis(csv_content):
+def simulate_heston_kou_mc(S0, V0, kappa, theta, sigma_v, rho, mu_est, lam, p, eta1, eta2, Nsteps=237, paths=10000, seed=42):
+    """
+    Simulasi Monte Carlo Heston-Kou dengan multi-lintasan dan analisis konvergensi.
+    """
+    np.random.seed(seed)
+    T = 1.0
+    dt_sim = T / Nsteps
+    kJ = p * eta1 / (eta1 - 1) + (1 - p) * eta2 / (eta2 + 1) - 1
+
+    paths = int(paths)
+    sim_paths = max(paths, 20000)
+
+    prices = np.zeros((sim_paths, Nsteps + 1))
+    prices[:, 0] = S0
+
+    S_t = np.full(sim_paths, S0, dtype=float)
+    v_t = np.full(sim_paths, V0, dtype=float)
+
+    for t in range(1, Nsteps + 1):
+        Z1 = np.random.normal(0, 1, sim_paths)
+        Z2 = np.random.normal(0, 1, sim_paths)
+        dW1 = np.sqrt(dt_sim) * Z1
+        dW2 = np.sqrt(dt_sim) * (rho * Z1 + np.sqrt(max(1 - rho**2, 0)) * Z2)
+        v_pos = np.maximum(v_t, 0)
+
+        jump_count = np.random.poisson(lam * dt_sim, sim_paths)
+        idx_jump = np.where(jump_count > 0)[0]
+        jumps = np.zeros(sim_paths)
+
+        for i in idx_jump:
+            total_jump = 0.0
+            for _ in range(jump_count[i]):
+                u = np.random.uniform()
+                if u < p:
+                    total_jump += np.random.exponential(scale=1 / eta1)
+                else:
+                    total_jump -= np.random.exponential(scale=1 / eta2)
+            jumps[i] = total_jump
+
+        S_t = S_t * np.exp((mu_est - lam * kJ - 0.5 * v_pos) * dt_sim + np.sqrt(v_pos) * dW1 + jumps)
+        v_new = v_t + kappa * (theta - v_pos) * dt_sim + sigma_v * np.sqrt(v_pos) * dW2
+        v_t = np.maximum(v_new, 0)
+        prices[:, t] = S_t
+
+    # Subset harga sesuai jumlah lintasan aktif
+    active_paths = min(paths, sim_paths)
+    active_prices = prices[:active_paths, :]
+    final_prices = active_prices[:, -1]
+    time_grid = np.arange(Nsteps + 1)
+
+    # 1. Lintasan representatif
+    mean_final_temp = np.mean(final_prices)
+    candidate_n = min(500, active_paths)
+    candidate_idx = np.argsort(np.abs(final_prices - mean_final_temp))[:candidate_n]
+    down_counts = np.array([np.sum(np.diff(active_prices[i, :]) < 0) for i in candidate_idx])
+    rep_path_idx = candidate_idx[np.argmax(down_counts)]
+    mc_one_line_price = active_prices[rep_path_idx, :].round(2).tolist()
+
+    # 2. 10 Lintasan sampel acak representatif (Ensemble)
+    sample_indices = np.linspace(0, active_paths - 1, min(10, active_paths), dtype=int)
+    sample_paths = [active_prices[idx, :].round(2).tolist() for idx in sample_indices]
+
+    # 3. Confidence bands (persentil 5%, 95%, dan mean per langkah waktu)
+    p05_band = np.percentile(active_prices, 5, axis=0).round(2).tolist()
+    p95_band = np.percentile(active_prices, 95, axis=0).round(2).tolist()
+    mean_path = np.mean(active_prices, axis=0).round(2).tolist()
+
+    # 4. Statistik probabilistik untuk lintasan aktif
+    mean_final = float(np.mean(final_prices))
+    median_final = float(np.median(final_prices))
+    std_final = float(np.std(final_prices))
+    p05_final = float(np.percentile(final_prices, 5))
+    p95_final = float(np.percentile(final_prices, 95))
+    prob_up = float(np.mean(final_prices > S0))
+
+    # 5. Histogram data
+    x_max = p95_final * 1.25
+    final_prices_plot = final_prices[final_prices <= x_max]
+    hist_counts, hist_edges = np.histogram(final_prices_plot, bins=40, density=False)
+
+    # 6. Analisis perbandingan konvergensi multi-lintasan
+    tiers = [1000, 2500, 5000, 10000, 20000]
+    if sim_paths >= 50000 and 50000 not in tiers:
+        tiers.append(50000)
+    if active_paths not in tiers:
+        tiers.append(active_paths)
+        tiers.sort()
+
+    multi_comparison = []
+    for n in tiers:
+        if n <= sim_paths:
+            sub = prices[:n, -1]
+            sub_mean = float(np.mean(sub))
+            sub_std = float(np.std(sub))
+            se = sub_std / np.sqrt(n)
+            multi_comparison.append({
+                'n_paths': n,
+                'mean_final': round(sub_mean, 2),
+                'median_final': round(float(np.median(sub)), 2),
+                'std_final': round(sub_std, 2),
+                'standard_error': round(se, 2),
+                'p05': round(float(np.percentile(sub, 5)), 2),
+                'p95': round(float(np.percentile(sub, 95)), 2),
+                'prob_up': round(float(np.mean(sub > S0)), 4),
+            })
+
+    return {
+        'monte_carlo': {
+            'paths': active_paths,
+            'steps': Nsteps,
+            'representative_path': mc_one_line_price,
+            'sample_paths': sample_paths,
+            'confidence_band': {
+                'p05': p05_band,
+                'p95': p95_band,
+                'mean': mean_path,
+            },
+            'time_grid': time_grid.tolist(),
+            'multi_comparison': multi_comparison,
+        },
+        'statistics': {
+            'S0': round(float(S0), 4),
+            'mean_final': round(mean_final, 4),
+            'median_final': round(median_final, 4),
+            'std_final': round(std_final, 4),
+            'p05': round(p05_final, 4),
+            'p95': round(p95_final, 4),
+            'prob_up_mc': round(prob_up, 6),
+        },
+        'histogram': {
+            'counts': hist_counts.tolist(),
+            'edges': hist_edges.tolist(),
+        }
+    }
+
+
+def run_analysis(csv_content, num_paths=10000):
     """
     Menjalankan seluruh analisis Heston-Kou dari data CSV.
+    num_paths: jumlah lintasan Monte Carlo (default: 10000).
     Returns dictionary berisi semua hasil analisis.
     """
     # 1. DISKRETISASI: LOG-PRICE & LOG-RETURN
@@ -82,9 +219,13 @@ def run_analysis(csv_content):
     lompatan_naik = []
     lompatan_turun = []
     for _, row in df_jump.iterrows():
+        tgl_str = row['Date'].strftime('%d-%m-%Y')
+        ret_val = round(float(row['r']), 4)
         entry = {
-            'tanggal': row['Date'].strftime('%d-%m-%Y'),
-            'return': round(float(row['r']), 4)
+            'tanggal': tgl_str,
+            'Tanggal': tgl_str,
+            'return': ret_val,
+            'Return': ret_val
         }
         if row['r'] > 0:
             lompatan_naik.append(entry)
@@ -155,15 +296,8 @@ def run_analysis(csv_content):
         V0 = float(out['v_proxy'].dropna().iloc[-1])
     V0 = max(V0, 1e-8)
 
-    paths = 10000
-    Nsteps = 237
-    T = 1.0
-    dt_sim = T / Nsteps
-    np.random.seed(42)
-
-    kJ = p * eta1 / (eta1 - 1) + (1 - p) * eta2 / (eta2 + 1) - 1
-
     if sigma_v > 5:
+        dt_sim = 1.0 / 237
         v_series = out['v_proxy_ma20'].dropna().values
         v_lag = v_series[:-1]
         dv = np.diff(v_series)
@@ -173,67 +307,14 @@ def run_analysis(csv_content):
         sigma_v_new = np.sqrt(np.mean((residual_new ** 2) / (np.maximum(v_lag, 1e-8) * dt_sim)))
         sigma_v = float(sigma_v_new)
 
-    prices = np.zeros((paths, Nsteps + 1))
-    variances = np.zeros((paths, Nsteps + 1))
-    prices[:, 0] = S0
-    variances[:, 0] = V0
-
-    S_t = np.full(paths, S0, dtype=float)
-    v_t = np.full(paths, V0, dtype=float)
-
-    for t in range(1, Nsteps + 1):
-        Z1 = np.random.normal(0, 1, paths)
-        Z2 = np.random.normal(0, 1, paths)
-        dW1 = np.sqrt(dt_sim) * Z1
-        dW2 = np.sqrt(dt_sim) * (rho * Z1 + np.sqrt(max(1 - rho**2, 0)) * Z2)
-        v_pos = np.maximum(v_t, 0)
-
-        jump_count = np.random.poisson(lam * dt_sim, paths)
-        jumps = np.zeros(paths)
-        idx_jump = np.where(jump_count > 0)[0]
-
-        for i in idx_jump:
-            total_jump = 0.0
-            for _ in range(jump_count[i]):
-                u = np.random.uniform()
-                if u < p:
-                    total_jump += np.random.exponential(scale=1 / eta1)
-                else:
-                    total_jump -= np.random.exponential(scale=1 / eta2)
-            jumps[i] = total_jump
-
-        S_t = S_t * np.exp((mu_est - lam * kJ - 0.5 * v_pos) * dt_sim + np.sqrt(v_pos) * dW1 + jumps)
-        v_new = v_t + kappa * (theta - v_pos) * dt_sim + sigma_v * np.sqrt(v_pos) * dW2
-        v_t = np.maximum(v_new, 0)
-
-        prices[:, t] = S_t
-        variances[:, t] = v_t
-
-    # Lintasan representatif
-    time_grid = np.arange(Nsteps + 1)
-    final_prices = prices[:, -1]
-    mean_final_temp = np.mean(final_prices)
-
-    candidate_n = 500
-    candidate_idx = np.argsort(np.abs(final_prices - mean_final_temp))[:candidate_n]
-    down_counts = np.array([np.sum(np.diff(prices[i, :]) < 0) for i in candidate_idx])
-    rep_path_idx = candidate_idx[np.argmax(down_counts)]
-    mc_one_line_price = prices[rep_path_idx, :].tolist()
-
-    # Statistik probabilistik
-    mean_final = float(np.mean(final_prices))
-    median_final = float(np.median(final_prices))
-    std_final = float(np.std(final_prices))
-    p05_final = float(np.percentile(final_prices, 5))
-    p95_final = float(np.percentile(final_prices, 95))
-    prob_up = float(np.mean(final_prices > S0))
-
-    # Histogram data
-    x_max = p95_final * 1.25
-    final_prices_plot = final_prices[final_prices <= x_max]
-    hist_counts, hist_edges = np.histogram(final_prices_plot, bins=40, density=False)
+    mc_results = simulate_heston_kou_mc(
+        S0=S0, V0=V0, kappa=kappa, theta=theta, sigma_v=sigma_v, rho=rho,
+        mu_est=mu_est, lam=lam, p=p, eta1=eta1, eta2=eta2,
+        Nsteps=237, paths=num_paths, seed=42
+    )
 
     # 5. ANALISIS FDT
+    T = 1.0
     k_J_fdt = (p * eta1) / (eta1 - 1) + ((1 - p) * eta2) / (eta2 + 1) - 1
 
     def phi_heston_kou(u):
@@ -312,25 +393,9 @@ def run_analysis(csv_content):
             'rho': round(float(rho), 6),
             'mu': round(float(mu_est), 6),
         },
-        'monte_carlo': {
-            'paths': paths,
-            'steps': Nsteps,
-            'representative_path': mc_one_line_price,
-            'time_grid': time_grid.tolist(),
-        },
-        'statistics': {
-            'S0': round(float(S0), 4),
-            'mean_final': round(mean_final, 4),
-            'median_final': round(median_final, 4),
-            'std_final': round(std_final, 4),
-            'p05': round(p05_final, 4),
-            'p95': round(p95_final, 4),
-            'prob_up_mc': round(prob_up, 6),
-        },
-        'histogram': {
-            'counts': hist_counts.tolist(),
-            'edges': hist_edges.tolist(),
-        },
+        'monte_carlo': mc_results['monte_carlo'],
+        'statistics': mc_results['statistics'],
+        'histogram': mc_results['histogram'],
         'fdt': {
             'prob_fdt': round(float(prob_fdt), 6),
             'target_price': round(target_fdt, 4),
