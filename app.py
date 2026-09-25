@@ -32,6 +32,9 @@ def get_default_results(num_paths=10000):
 
 
 @app.route('/')
+@app.route('/index')
+@app.route('/api')
+@app.route('/api/index')
 def index():
     return render_template('index.html')
 
